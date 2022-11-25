@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <limits.h>
+#include <stdbool.h>
 #include "tipos.h"
 
 #define TAM_MEMORIA_PRINCIPAL 64
@@ -24,7 +25,7 @@ void imprimeMemoriaPrincipal()
     puts("\n");
 }
 
-void imprimeProcessos()
+void incrementaTempoProcessos()
 {
     for (int i = 0 ; i < processosCriados ; i++)
     {
@@ -68,6 +69,199 @@ void criaProcesso()
     printf("Processo %d criado.\n\n", novo.pid);
 }
 
+Processo *retornaProcessoMaisAntigo(int pidProcessoSolicitante)
+{
+    int maiorTempo = processos[0].tempo, i = 1;
+    Processo *maisAntigo = &processos[0];
+
+    if (pidProcessoSolicitante == 1)
+    {
+        maisAntigo = &processos[1];
+        maiorTempo = processos[1].tempo;
+        i = 2;
+    }       
+
+    for ( ; i < processosCriados ; i++)
+    {
+        if (processos[i].tempo > maiorTempo && processos[i].paginasCarregadas != 0 && maisAntigo->pid != i)
+        {
+            maisAntigo = &processos[i];
+            maiorTempo = processos[i].tempo;
+        }
+    }
+
+    return maisAntigo;
+}
+
+Pagina *retornaPaginaMenosUsadaRecentemente(Processo *processo, int *pagina)
+{
+    int maiorTempoPagina = -1, k = 0;
+    Pagina *menosUsadaRecentemente;
+
+    for ( ; k < processo->paginasTotais ; k++)   // Procura a página menos usada recentemente
+    {
+        if (processo->tabela[k].emMemoria && processo->tabela[k].tempoSemUso > maiorTempoPagina)
+        {
+            maiorTempoPagina = processo->tabela[k].tempoSemUso;
+            menosUsadaRecentemente = &processo->tabela[k];
+            *pagina = k;
+        } 
+    }
+
+    return menosUsadaRecentemente;
+}
+
+void realizaSwapGlobal(Processo **processo, Pagina *paraAlocar, const int *numPagina)
+{
+    Processo *maisAntigo = retornaProcessoMaisAntigo((*processo)->pid);
+    int pagina;
+
+    Pagina *menosUsadaRecentemente = retornaPaginaMenosUsadaRecentemente(maisAntigo, &pagina);
+
+    int posicao = menosUsadaRecentemente->quadro;
+
+    paraAlocar->emMemoria = 1;
+    paraAlocar->tempoSemUso = 0;    
+    paraAlocar->quadro = posicao;
+
+    if (*numPagina == -1)
+    {
+        paraAlocar->pid = (*processo)->pid;
+        printf("A página %d do processo %d foi colocada em disco para dar lugar à nova página %d do processo %d.\n\n", pagina, maisAntigo->pid, (*processo)->paginasTotais++, (*processo)->pid);
+        (*processo)->tabela[(*processo)->paginasTotais - 1] = *paraAlocar;
+    }
+
+    else
+    {
+        printf("A página %d do processo %d foi colocada em disco para dar lugar à página %d do processo %d.\n\n", pagina, maisAntigo->pid, *numPagina, (*processo)->pid);
+        (*processo)->tabela[*numPagina] = *paraAlocar;
+    }     
+
+    memoriaPrincipal[posicao] = *paraAlocar;
+    (*processo)->paginasCarregadas++;
+
+    menosUsadaRecentemente->emMemoria = 0;
+    menosUsadaRecentemente->quadro = -1;
+    menosUsadaRecentemente->tempoSemUso = -1;
+    maisAntigo->paginasCarregadas--;
+
+    if (maisAntigo->paginasCarregadas == 0)
+    {
+        printf("Processo %d está sem páginas na memória. O mesmo irá se bloquear.\n\n", maisAntigo->pid);
+        maisAntigo->tempo = 0;
+    }
+}
+
+void realizaSwapLocal(Processo **processo, Pagina *paraAlocar, const int *numPagina)
+{
+    int maiorTempo = -1, k = 0, pagina;
+    Pagina *menosUsadaRecentemente = retornaPaginaMenosUsadaRecentemente(*processo, &pagina);
+
+    paraAlocar->emMemoria = 1;
+    paraAlocar->tempoSemUso = 0;
+    paraAlocar->pid = (*processo)->pid;
+    paraAlocar->quadro = menosUsadaRecentemente->quadro;    
+
+    /* Troca as páginas na memória principal e faz o swap */
+
+    if (*numPagina == -1)
+    {
+        printf("Página %d no endereço %d do processo %d foi trocada pela página %d.\n", pagina, menosUsadaRecentemente->quadro, (*processo)->pid, (*processo)->paginasTotais++);
+        (*processo)->tabela[(*processo)->paginasTotais - 1] = *paraAlocar;
+    }
+
+    else
+    {
+        printf("Página %d no endereço %d do processo %d foi trocada pela página %d do mesmo processo.\n", pagina, menosUsadaRecentemente->quadro, (*processo)->pid, *numPagina);
+        (*processo)->tabela[*numPagina] = *paraAlocar;
+    }    
+    
+    memoriaPrincipal[menosUsadaRecentemente->quadro] = *paraAlocar;    
+
+    menosUsadaRecentemente->emMemoria = 0;
+    menosUsadaRecentemente->quadro = -1;
+    menosUsadaRecentemente->tempoSemUso = -1;
+}
+
+void realizaAlocacaoPagina(Processo **processo, Pagina *paginaParaAlocacao, int *numPagina)
+{
+    if ((*processo)->paginasCarregadas == 4)    // Working set no limite, iremos tirar uma página que não esteja sendo usada
+        realizaSwapLocal(processo, paginaParaAlocacao, numPagina);
+
+    else  // O processo não atingiu o working set máximo
+    {
+        if (posicaoLivre != TAM_MEMORIA_PRINCIPAL)
+        {
+            paginaParaAlocacao->emMemoria = 1;
+            paginaParaAlocacao->tempoSemUso = 0;
+            paginaParaAlocacao->pid = (*processo)->pid;
+            paginaParaAlocacao->quadro = posicaoLivre;
+            
+            memoriaPrincipal[posicaoLivre] = *paginaParaAlocacao;
+
+            printf("Página %d do processo %d alocada na posição %d.\n", (*processo)->paginasTotais, (*processo)->pid, posicaoLivre++);
+            (*processo)->tabela[(*processo)->paginasTotais] = *paginaParaAlocacao;
+            (*processo)->paginasCarregadas++;
+            (*processo)->paginasTotais++;
+        }
+
+        else // Remove a página mais antiga do processo mais antigo
+            realizaSwapGlobal(processo, paginaParaAlocacao, numPagina);
+    }
+}
+
+void solicitaAlocacaoPagina()
+{            
+    /* Seleciona um processo aleatório para alocar uma página de memória */
+    int processoCriacaoMemoria = 1 + rand() % processosCriados;
+    Processo *processo = &processos[processoCriacaoMemoria - 1];        
+
+    imprimeInformacoesProcesso(*processo);
+
+    Pagina paginaParaAlocacao;
+    int numPagina = -1;
+
+    if (processo->paginasTotais == LIMITE_PAGINAS_PROCESSO)
+    {
+        numPagina = rand() % processo->paginasTotais;
+
+        while (processo->tabela[numPagina].emMemoria)
+            numPagina = rand() % processo->paginasTotais;
+
+        paginaParaAlocacao = processo->tabela[numPagina];
+    }
+
+    realizaAlocacaoPagina(&processo, &paginaParaAlocacao, &numPagina);     
+}
+
+void referenciaPaginaProcesso()
+{
+    Processo *processoAleatorio = &processos[rand() % processosCriados];
+
+    while (processoAleatorio->paginasTotais == 0)
+        processoAleatorio = &processos[rand() % processosCriados];
+
+    int numPagina = rand() % processoAleatorio->paginasTotais;
+
+    Pagina paginaAleatoria = processoAleatorio->tabela[numPagina];
+
+    if (paginaAleatoria.emMemoria)
+    {
+        paginaAleatoria.tempoSemUso = 0;
+        memoriaPrincipal[paginaAleatoria.quadro].tempoSemUso = 0;
+        processoAleatorio->tabela[numPagina] = paginaAleatoria;
+
+        printf("Página %d do processo %d no endereço %d foi referenciada.\n\n", numPagina, processoAleatorio->pid, paginaAleatoria.quadro);
+    }
+
+    else
+    {
+        printf("Página %d do processo %d foi referenciada, mas não está carregada em memória.\n", numPagina, processoAleatorio->pid);
+
+        realizaAlocacaoPagina(&processoAleatorio, &paginaAleatoria, &numPagina);
+    }
+}
+
 int main()
 {
     srand(time(NULL));
@@ -75,243 +269,43 @@ int main()
     for (int i = 0 ; i < TAM_MEMORIA_PRINCIPAL ; i++)
         memoriaPrincipal[i].pid = 0;
 
-    while (1)
+    while (processosCriados != NUM_PROCESSOS)
     {
         printf("\n\nInstante %d\n", instante);
         puts("================================================");
 
         imprimeMemoriaPrincipal();
 
-        imprimeProcessos();
+        incrementaTempoProcessos();
 
         if (instante++ % 3 == 0)
         {
-            if (processosCriados != NUM_PROCESSOS)
-                criaProcesso();
-            
-            /* Seleciona um processo aleatório para alocar uma página de memória */
-            int processoCriacaoMemoria = 1 + rand() % processosCriados;
-            Processo *processo = &processos[processoCriacaoMemoria - 1];        
-
-            imprimeInformacoesProcesso(*processo);
-
-            if (processo->paginasTotais < LIMITE_PAGINAS_PROCESSO)   // Há possibilidade de criar uma nova página
-            {
-                Pagina nova;
-                nova.emMemoria = 1;
-                nova.tempoSemUso = 0;
-                nova.pid = processo->pid;
-
-                if (processo->paginasCarregadas == 4)    // Working set no limite, iremos tirar uma página que não esteja sendo usada
-                {
-                    int maiorTempo = -1, k = 0, posicao, pagina;
-                    Pagina *menosUsadaRecentemente;
-
-                    for ( ; k < processo->paginasTotais ; k++)   // Procura a página menos usada recentemente
-                    {
-                        if (processo->tabela[k].emMemoria && processo->tabela[k].tempoSemUso > maiorTempo)
-                        {
-                            maiorTempo = processo->tabela[k].tempoSemUso;
-                            menosUsadaRecentemente = &processo->tabela[k];
-                            pagina = k;
-                        } 
-                    }
-
-                    /* Troca as páginas na memória principal e faz o swap */
-                    printf("Página %d no endereço %d do processo %d foi trocada pela página %d.\n", pagina, menosUsadaRecentemente->quadro, processo->pid, processo->paginasTotais++);
-                    posicao = menosUsadaRecentemente->quadro;
-                    nova.quadro = posicao;
-                    processo->tabela[processo->paginasTotais - 1] = nova;
-                    memoriaPrincipal[posicao] = nova;
-
-                    menosUsadaRecentemente->emMemoria = 0;
-                    menosUsadaRecentemente->quadro = -1;
-                    menosUsadaRecentemente->tempoSemUso = -1;
-                }
-
-                else  // O processo não atingiu o working set máximo
-                {
-                    if (posicaoLivre != TAM_MEMORIA_PRINCIPAL)
-                    {
-                        nova.quadro = posicaoLivre;
-                        
-                        memoriaPrincipal[posicaoLivre] = nova;
-
-                        printf("Página %d do processo %d alocada na posição %d.\n", processo->paginasTotais, processo->pid, posicaoLivre++);
-                        processo->tabela[processo->paginasTotais] = nova;
-                        processo->paginasCarregadas++;
-                        processo->paginasTotais++;
-                    }
-
-                    else // Remove a página mais antiga do processo mais antigo
-                    {
-                        int maiorTempo = -1;
-                        Processo *maisAntigo;
-
-                        for (int i = 0 ; i < processosCriados ; i++)
-                        {
-                            if (processos[i].tempo > maiorTempo && processos[i].paginasCarregadas != 0)
-                            {
-                                maisAntigo = &processos[i];
-                                maiorTempo = processos[i].tempo;
-                            }
-                        }
-
-                        int maiorTempoPagina = -1, k = 0, posicao, pagina;
-                        Pagina *menosUsadaRecentemente;
-
-                        for ( ; k < maisAntigo->paginasTotais ; k++)   // Procura a página menos usada recentemente
-                        {
-                            if (maisAntigo->tabela[k].emMemoria && maisAntigo->tabela[k].tempoSemUso > maiorTempoPagina)
-                            {
-                                maiorTempoPagina = maisAntigo->tabela[k].tempoSemUso;
-                                menosUsadaRecentemente = &maisAntigo->tabela[k];
-                                pagina = k;
-                            } 
-                        }
-
-                        printf("A página %d do processo %d foi colocada em disco para dar lugar à nova página %d do processo %d.\n\n", pagina, maisAntigo->pid, processo->paginasTotais++, processo->pid);
-
-                        posicao = menosUsadaRecentemente->quadro;
-                        nova.quadro = posicao;
-                        processo->tabela[processo->paginasTotais - 1] = nova;
-                        memoriaPrincipal[posicao] = nova;
-                        processo->paginasCarregadas++;
-
-                        menosUsadaRecentemente->emMemoria = 0;
-                        menosUsadaRecentemente->quadro = -1;
-                        menosUsadaRecentemente->tempoSemUso = -1;
-                        maisAntigo->paginasCarregadas--;
-
-                        if (maisAntigo->paginasCarregadas == 0)
-                        {
-                            printf("Processo %d está sem páginas na memória. O mesmo irá se bloquear.\n\n", maisAntigo->pid);
-                            maisAntigo->tempo = 0;
-                        }
-
-                    }                    
-                }
-                
-            }
-
-            else    // Já chegou no limite, iremos fazer swap entre uma página no disco e outra na memória ou retirar uma página de um processo
-            {
-                Pagina *paginaDisco;
-                int paginaAleatoriaDisco = rand() % processo->paginasTotais;
-
-                while (processo->tabela[paginaAleatoriaDisco].emMemoria)
-                    paginaAleatoriaDisco = rand() % processo->paginasTotais;
-
-                paginaDisco = &processo->tabela[paginaAleatoriaDisco];
-
-                if (processo->paginasCarregadas == 4)
-                {
-                    int maiorTempo = -1, k = 0, pagina;
-                    Pagina *menosUsadaRecentemente;
-
-                    for ( ; k < processo->paginasTotais ; k++)   // Procura a página menos usada recentemente
-                    {
-                        if (processo->tabela[k].emMemoria && processo->tabela[k].tempoSemUso > maiorTempo)
-                        {
-                            maiorTempo = processo->tabela[k].tempoSemUso;
-                            menosUsadaRecentemente = &processo->tabela[k];
-                            pagina = k;
-                        } 
-                    }                   
-
-                    paginaDisco->emMemoria = 1;
-                    paginaDisco->quadro = menosUsadaRecentemente->quadro;
-                    paginaDisco->tempoSemUso = 0;
-
-                    memoriaPrincipal[menosUsadaRecentemente->quadro] = *paginaDisco; 
-
-                    printf("Página %d do processo %d foi trocada pela página %d do mesmo processo.\n", pagina, processo->pid, paginaAleatoriaDisco);                   
-
-                    menosUsadaRecentemente->emMemoria = 0;
-                    menosUsadaRecentemente->quadro = -1;
-                    menosUsadaRecentemente->tempoSemUso = -1;
-                }
-
-                else // Iremos retirar a página de um processo
-                {
-                    int maiorTempo = -1;
-                    Processo *maisAntigo;
-
-                    for (int i = 0 ; i < processosCriados ; i++)
-                    {
-                        if (processos[i].tempo > maiorTempo && processos[i].paginasCarregadas != 0)
-                        {
-                            maisAntigo = &processos[i];
-                            maiorTempo = processos[i].tempo;
-                        }
-                    }
-
-                    int maiorTempoPagina = -1, k = 0, posicao, pagina;
-                    Pagina *menosUsadaRecentemente;
-
-                    for ( ; k < maisAntigo->paginasTotais ; k++)   // Procura a página menos usada recentemente
-                    {
-                        if (maisAntigo->tabela[k].emMemoria && maisAntigo->tabela[k].tempoSemUso > maiorTempoPagina)
-                        {
-                            maiorTempoPagina = maisAntigo->tabela[k].tempoSemUso;
-                            menosUsadaRecentemente = &maisAntigo->tabela[k];
-                            pagina = k;
-                        } 
-                    }
-
-                    printf("A página %d do processo %d foi colocada em disco para dar lugar à nova página %d do processo %d.\n\n", pagina, maisAntigo->pid, paginaAleatoriaDisco, processo->pid);
-
-                    posicao = menosUsadaRecentemente->quadro;
-                    
-                    paginaDisco->emMemoria = 1;
-                    paginaDisco->quadro = posicao;
-                    paginaDisco->tempoSemUso = 0;
-
-                    memoriaPrincipal[posicao] = *paginaDisco;
-                    processo->paginasCarregadas++;
-
-                    menosUsadaRecentemente->emMemoria = 0;
-                    menosUsadaRecentemente->quadro = -1;
-                    menosUsadaRecentemente->tempoSemUso = -1;
-                    maisAntigo->paginasCarregadas--;
-
-                    if (maisAntigo->paginasCarregadas == 0)
-                    {
-                        printf("Processo %d está sem páginas na memória. O mesmo irá se bloquear.\n\n", maisAntigo->pid);
-                        maisAntigo->tempo = 0;
-                    }
-                }                                    
-            }       
-            
+            criaProcesso();
+            solicitaAlocacaoPagina();
         }
 
-        else // Apenas referencia uma página na memória
-        {
-            int paginaAleatoria = rand() % TAM_MEMORIA_PRINCIPAL;
+        else
+            referenciaPaginaProcesso();
 
-            while (memoriaPrincipal[paginaAleatoria].pid == 0)
-                paginaAleatoria = rand() % TAM_MEMORIA_PRINCIPAL;
+        sleep(1);
+    }
 
-            Processo *donoPagina = &processos[memoriaPrincipal[paginaAleatoria].pid - 1];
+    while (true)
+    {
+        printf("\n\nInstante %d\n", instante);
+        puts("================================================");
 
-            for (int i = 0 ; i < donoPagina->paginasTotais ; i++)
-            {
-                if (donoPagina->tabela[i].quadro == paginaAleatoria)
-                {
-                    Pagina *referenciada = &donoPagina->tabela[i];
+        imprimeMemoriaPrincipal();
 
-                    referenciada->tempoSemUso = 0;
+        incrementaTempoProcessos();
 
-                    memoriaPrincipal[paginaAleatoria] = *referenciada;
+        if (instante++ % 3 == 0)
+            solicitaAlocacaoPagina();
 
-                    printf("Página %d do processo %d foi referenciada.\n\n", i, donoPagina->pid);
+        else
+            referenciaPaginaProcesso();
 
-                    break;
-                }
-            }
-        }
-
-        //sleep(1);
+        sleep(1);
     }
 
     return 0;

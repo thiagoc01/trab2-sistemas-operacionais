@@ -22,7 +22,7 @@ void imprimeInformacoesProcesso(const Processo processo)
         for (int i = 0 ; i < processo.paginasTotais ; i++)
         {
             if (processo.tabela[i].emMemoria)
-                printf("Página %d no espaço %d\n", i, processo.tabela[i].quadro);
+                printf("Página %d no espaço %d (tempo sem alteração: %d)\n", i, processo.tabela[i].quadro, processo.tabela[i].tempoSemUso);
             
             else
                 printf("Página %d no disco\n", i);

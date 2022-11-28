@@ -7,7 +7,7 @@ void criaProcesso(Processo *processos, int *processosCriados)
 {
     Processo novo = {.pid = *processosCriados + 1, .paginasCarregadas = 0, .paginasTotais = 0, .tempo = 0};
     processos[(*processosCriados)++] = novo;
-    printf("Processo %d criado.\n\n", novo.pid);
+    printf(BMAG "Processo %d criado.\n\n" COLOR_RESET, novo.pid);
 }
 
 void incrementaTempoProcessos(Processo *processos, const int processosCriados)

@@ -5,19 +5,19 @@
 
 void imprimeMemoriaPrincipal(const Pagina *memoriaPrincipal)
 {
-    puts("Memória principal: \n");
+    puts(YEL "Memória principal: \n");
     
     for (int i = 0 ; i < TAM_MEMORIA_PRINCIPAL ; i++)
        printf("%d ", memoriaPrincipal[i].pid);
 
-    puts("\n");
+    puts("\n" COLOR_RESET);
 }
 
 void imprimeInformacoesProcesso(const Processo processo)
 {
     if (processo.paginasTotais)
     {
-        printf("Tabela de páginas do processo %d\n", processo.pid);
+        printf(CYN "Tabela de páginas do processo %d\n", processo.pid);
         puts("================================================");
         for (int i = 0 ; i < processo.paginasTotais ; i++)
         {
@@ -30,7 +30,7 @@ void imprimeInformacoesProcesso(const Processo processo)
     }
 
     else
-        printf("Processo %d ainda não possui páginas criadas.", processo.pid);            
+        printf(CYN "Processo %d ainda não possui páginas criadas.", processo.pid);            
     
-    puts("\n");
+    puts("\n" COLOR_RESET);
 }

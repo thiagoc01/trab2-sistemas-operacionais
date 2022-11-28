@@ -19,8 +19,8 @@ void gerenciaMemoriaPrimeiraEtapa(Pagina *memoriaPrincipal, Processo *processos,
 {
     while (*processosCriados != NUM_PROCESSOS)
     {
-        printf("\n\nInstante %d\n", *instante);
-        puts("================================================");
+        printf(GRN "\n\nInstante %d\n", *instante);
+        puts("================================================" COLOR_RESET);
 
         imprimeMemoriaPrincipal(memoriaPrincipal);
 
@@ -43,8 +43,8 @@ void gerenciaMemoria(Pagina *memoriaPrincipal, Processo *processos, int processo
 {
     while (true)
     {
-        printf("\n\nInstante %d\n", *instante);
-        puts("================================================");
+        printf(GRN "\n\nInstante %d\n", *instante);
+        puts("================================================" COLOR_RESET);
 
         imprimeMemoriaPrincipal(memoriaPrincipal);
 
@@ -228,12 +228,12 @@ void referenciaPaginaProcesso(Pagina *memoriaPrincipal, Processo *processos, int
         memoriaPrincipal[paginaAleatoria.quadro].tempoSemUso = 0;
         processoAleatorio->tabela[numPagina] = paginaAleatoria;
 
-        printf("Página %d do processo %d no endereço %d foi referenciada.\n\n", numPagina, processoAleatorio->pid, paginaAleatoria.quadro);
+        printf(MAG "Página %d do processo %d no endereço %d foi referenciada.\n\n" COLOR_RESET, numPagina, processoAleatorio->pid, paginaAleatoria.quadro);
     }
 
     else    // Page fault, iremos buscar a página no disco e trazer para a memória principal.
     {
-        printf("Página %d do processo %d foi referenciada, mas não está carregada em memória.\n", numPagina, processoAleatorio->pid);
+        printf(RED "Página %d do processo %d foi referenciada, mas não está carregada em memória.\n\n" COLOR_RESET, numPagina, processoAleatorio->pid);
 
         realizaAlocacaoPagina(memoriaPrincipal, processos, &processoAleatorio, &paginaAleatoria, &numPagina, processosCriados);
     }

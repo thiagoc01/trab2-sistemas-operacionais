@@ -37,11 +37,11 @@ endif
 
 all: main clean	
 
-main: log gerenciamento main.c
+main: gerenciamento main.c
 	$(CC) $(FLAGS_AUX) main.c
 	$(CC) $(OBJS) $(FLAGS_TARGET)
 
-gerenciamento: gerenciamento/processo.c gerenciamento/memoria.c
+gerenciamento: log gerenciamento/processo.c gerenciamento/memoria.c
 	$(CC) $(FLAGS_AUX) gerenciamento/processo.c
 	$(CC) $(FLAGS_AUX) gerenciamento/memoria.c
 

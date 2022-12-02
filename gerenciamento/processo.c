@@ -42,7 +42,7 @@ Processo *retornaProcessoMaisAntigo(Processo *processos, int pidProcessoSolicita
 
     for (int i = 0 ; i < processosCriados ; i++)
     {
-        if (processos[i].tempo > maiorTempo && processos[i].paginasCarregadas != 0 && maisAntigo->pid != pidProcessoSolicitante)
+        if (processos[i].tempo > maiorTempo && processos[i].paginasCarregadas != 0 && processos[i].pid != pidProcessoSolicitante)
         {
             maisAntigo = &processos[i];
             maiorTempo = processos[i].tempo;

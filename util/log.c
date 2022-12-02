@@ -8,7 +8,13 @@ void imprimeMemoriaPrincipal(const Pagina *memoriaPrincipal)
     puts(YEL "Memória principal: \n");
     
     for (int i = 0 ; i < TAM_MEMORIA_PRINCIPAL ; i++)
-       printf("%d ", memoriaPrincipal[i].pid);
+    {
+        for (int j = 0 ; j < QUEBRA_LINHAS_MEMORIA_IMPRESSAO ; i++, j++)
+            printf("%d ", memoriaPrincipal[i].pid);
+
+        i--;
+        puts("");
+    }
 
     puts("\n" COLOR_RESET);
 }
